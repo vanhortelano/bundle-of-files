@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bundle Pad</title>
+<style>
+:root{--bg:#eef1f4;--paper:#fbfcfd;--ink:#1d2630;--mute:#6b7885;--line:#d8dee4;--acc:#1f6f8b;--accink:#fff;--warn:#a5521f}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14181d;--paper:#1b2127;--ink:#e4e9ee;--mute:#8d9aa7;--line:#2c353e;--acc:#5cb8d6;--accink:#0f1a20;--warn:#e0985f}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px;padding-top:max(20px,env(safe-area-inset-top))}
+main{max-width:860px;margin:0 auto;display:grid;gap:16px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 10px}
+p.sub{margin:4px 0 0;color:var(--mute);max-width:62ch}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=text]{flex:1;min-width:180px;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+button,.btn{font:inherit;cursor:pointer;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--mute);margin-top:10px}
+#drop.on{border-color:var(--acc);color:var(--ink)}
+.list{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:10px;background:repeating-linear-gradient(var(--paper) 0 31px,var(--line) 31px 32px)}
+.f{display:flex;gap:10px;align-items:center;height:32px;padding:0 10px;font:13px ui-monospace,Menlo,Consolas,monospace}
+.f.skip{color:var(--mute)}.f.dir{font-weight:600}.f button{all:unset;cursor:pointer;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.f button:focus-visible{outline:2px solid var(--acc)}
+.f span.n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.f small{color:var(--mute);white-space:nowrap}
+.f small.w{color:var(--warn)}
+.stat{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;color:var(--mute)}
+.stat b{color:var(--ink)}
+.lib{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.lib:first-of-type{border-top:0}
+.lib div{flex:1;min-width:0}
+.lib small{display:block;color:var(--mute)}
+.empty{color:var(--mute);margin:0}
+.cost{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:560px){.cost{grid-template-columns:1fr}}
+.cost .lab{color:var(--mute);display:block}.cost strong{font-size:30px;letter-spacing:-.02em;line-height:1.1;display:block}
+.meter{height:6px;border-radius:3px;background:var(--line);margin:8px 0 4px;overflow:hidden}.meter i{display:block;height:100%;width:0;background:var(--acc);transition:width .25s}.meter.hot i{background:var(--warn)}
+.cost small,.note{color:var(--mute);font-size:13px}.note{margin:12px 0 0}
+#msg{color:var(--warn);min-height:1.4em;margin:8px 0 0}
+</style>
+</head>
+<body>
+<main>
+ <header>
+  <h1>Bundle Pad</h1>
+  <p class="sub">Pick folders or files, and Bundle Pad packs them into one HTML file. People can browse it, and an AI can read every file in a single upload.</p>
+ </header>
+
+ <section class="card" id="cost" aria-live="polite">
+  <h2>Tokens used when you upload this bundle</h2>
+  <div class="cost">
+   <div><span class="lab">Claude</span><strong id="tC">0</strong><div class="meter" id="mC"><i></i></div><small id="pC"></small></div>
+   <div><span class="lab">ChatGPT</span><strong id="tG">0</strong><div class="meter" id="mG"><i></i></div><small id="pG"></small></div>
+  </div>
+  <p class="note">Estimates for the bundle HTML file with your ticked files, accurate to about 15%. Each app counts tokens its own way.</p>
+ </section>
+
+ <section class="card">
+  <h2>New bundle</h2>
+  <div class="row">
+   <input type="text" id="name" placeholder="Bundle name, for example my-website" aria-label="Bundle name">
+  </div>
+  <div id="drop">Drop folders here, or use the buttons below
+   <div class="row" style="justify-content:center;margin-top:10px">
+    <button id="bFolder" type="button">Select folder</button>
+    <button id="bFiles" type="button">Add files</button>
+    <button id="bClear" type="button">Clear</button>
+   </div>
+  </div>
+  <input type="file" id="inFolder" webkitdirectory multiple hidden>
+  <input type="file" id="inFiles" multiple hidden>
+  <div class="list" id="list" role="list" hidden></div>
+  <div class="stat" id="stat"></div>
+  <p id="msg" role="status"></p>
+  <div class="row">
+   <button class="p" id="bGen" type="button" disabled>Download bundle</button>
+   <button id="bSave" type="button" disabled>Save to my library</button>
+   <button id="bAll" type="button" disabled>Toggle all</button>
+  </div>
+ </section>
+
+ <section class="card">
+  <h2>My library</h2>
+  <div id="lib"><p class="empty">Nothing saved yet. Bundles you save stay in this browser.</p></div>
+ </section>
+</main>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const MAXF=1024*1024;
+const SKIPDIR=/(^|\/)(node_modules|\.git|dist|build|__pycache__|\.next|\.venv|\.idea|\.vscode)\//;
+const BIN=/\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|gz|tar|7z|rar|exe|dll|so|dylib|mp3|mp4|mov|avi|wav|woff2?|ttf|otf|eot|class|jar|psd|sqlite|db|lock)$/i;
+let files=[];
+
+const tok=t=>Math.ceil(t.length/4);
+function est(t,d){const na=(t.match(/[^\x00-\x7f]/g)||[]).length;return Math.ceil((t.length-na)/d+na*0.9)}
+const fmt=n=>n>=1000?(n/1000).toFixed(1).replace(/\.0$/,"")+"k":String(n);
+
+async function addFiles(list){
+  const seen=new Set(files.map(f=>f.path));
+  for(const file of list){
+    const path=(file.webkitRelativePath||file._path||file.name).replace(/^\.?\//,"");
+    if(seen.has(path))continue;
+    seen.add(path);
+    const f={path,text:"",tokens:0,on:false,why:""};
+    if(SKIPDIR.test("/"+path)) f.why="ignored folder";
+    else if(BIN.test(path)) f.why="binary";
+    else if(file.size>MAXF) f.why="over 1 MB";
+    else{
+      try{
+        const t=await file.text();
+        if(t.indexOf("\u0000")>-1) f.why="binary";
+        else{f.text=t;f.tokens=tok(t);f.tg=est(t,4);f.tc=est(t,3.5);f.on=true}
+      }catch(e){f.why="unreadable"}
+    }
+    files.push(f);
+  }
+  files.sort((a,b)=>{const x=a.path.split("/"),y=b.path.split("/");for(let i=0;i<Math.min(x.length,y.length);i++){if(x[i]!==y[i]){const fx=i<x.length-1,fy=i<y.length-1;if(fx!==fy)return fx?-1:1;return x[i].localeCompare(y[i])}}return x.length-y.length});
+  if(!$("name").value&&files[0]&&files[0].path.includes("/"))$("name").value=files[0].path.split("/")[0];
+  render();
+}
+
+const openB={};
+function render(){
+  const l=$("list");l.hidden=!files.length;l.textContent="";
+  const root={d:{},f:[]};
+  files.forEach(f=>{let n=root;const p=f.path.split("/"),nm=p.pop();p.forEach((x,i)=>{n=n.d[x]||(n.d[x]={d:{},f:[],k:p.slice(0,i+1).join("/")})});n.f.push([nm,f])});
+  (function draw(n,depth){
+    Object.keys(n.d).sort((x,y)=>x.localeCompare(y)).forEach(k=>{
+      const c=n.d[k],isOpen=openB[c.k]===true;
+      const kids=files.filter(f=>f.path.indexOf(c.k+"/")===0&&!f.why);
+      const on=kids.filter(f=>f.on).length;
+      const r=document.createElement("div");r.className="f dir";r.style.paddingLeft=(10+depth*18)+"px";
+      const cb=document.createElement("input");cb.type="checkbox";cb.disabled=!kids.length;cb.checked=!!kids.length&&on===kids.length;cb.indeterminate=on>0&&on<kids.length;
+      cb.onchange=()=>{kids.forEach(f=>f.on=cb.checked);render()};
+      const b=document.createElement("button");b.type="button";b.textContent=(isOpen?"\u25BC ":"\u25B6 ")+k;
+      b.onclick=()=>{openB[c.k]=!isOpen;render()};
+      const s=document.createElement("small");s.textContent=on+"/"+kids.length;
+      r.append(cb,b,s);l.appendChild(r);
+      if(isOpen)draw(c,depth+1);
+    });
+    n.f.sort((x,y)=>x[0].localeCompare(y[0])).forEach(e=>{
+      const f=e[1];
+      const d=document.createElement("label");d.className="f"+(f.why?" skip":"");d.setAttribute("role","listitem");d.style.paddingLeft=(10+depth*18)+"px";
+      const c=document.createElement("input");c.type="checkbox";c.checked=f.on;c.disabled=!!f.why;
+      c.onchange=()=>{f.on=c.checked;render()};
+      const nm=document.createElement("span");nm.className="n";nm.textContent=e[0];nm.title=f.path;
+      const s=document.createElement("small");if(f.why)s.className="w";s.textContent=f.why||fmt(f.tokens)+" tok";
+      d.append(c,nm,s);l.appendChild(d);
+    });
+  })(root,0);
+  stats();
+}
+
+function stats(){
+  const on=files.filter(f=>f.on);
+  const t=on.reduce((a,f)=>a+f.tokens,0);
+  $("stat").innerHTML=files.length?"<span><b>"+on.length+"</b> of "+files.length+" files</span><span>about <b>"+fmt(t)+"</b> tokens</span>":"";
+  const ovh=Math.ceil((viewer.toString().length+4200)/3.8);
+  let g=0,c=0;on.forEach(f=>{const o=Math.ceil((f.path.length*2+90)/4);g+=f.tg+o;c+=f.tc+o});
+  if(on.length){g+=ovh;c+=ovh}
+  [["C",c,200000,"Claude"],["G",g,128000,"ChatGPT"]].forEach(a=>{
+    $("t"+a[0]).textContent=a[1].toLocaleString();
+    const pc=a[1]/a[2]*100;
+    $("m"+a[0]).firstChild.style.width=Math.min(100,pc)+"%";
+    $("m"+a[0]).classList.toggle("hot",pc>80);
+    $("p"+a[0]).textContent=on.length?(pc<1?"under 1":Math.round(pc))+"% of a "+fmt(a[2])+" token window"+(pc>100?", too big for one chat":""):"Select files to see the cost";
+  });
+  ["bGen","bSave"].forEach(k=>$(k).disabled=!on.length);
+  $("bAll").disabled=!files.some(f=>!f.why);
+  $("msg").textContent=on.length&&t>150000?"This bundle is large. Untick files the AI does not need, or split it into several bundles.":"";
+}
+
+/* ---------- bundle writer ---------- */
+function viewer(){
+  const files=[...document.querySelectorAll("script[data-path]")].map(s=>({path:s.dataset.path,text:s.textContent.replace(/<\\\/script/gi,"<"+"/script"),on:true}));
+  const $=id=>document.getElementById(id);
+  let cur=null;
+  const title=document.title;
+  const openMap={};
+  function list(q){
+    const box=$("tree");box.textContent="";q=(q||"").toLowerCase();
+    const root={d:{},f:[]};
+    files.forEach(f=>{
+      if(q&&f.path.toLowerCase().indexOf(q)<0&&f.text.toLowerCase().indexOf(q)<0)return;
+      let n=root;const p=f.path.split("/"),nm=p.pop();
+      p.forEach((s,i)=>{n=n.d[s]||(n.d[s]={d:{},f:[],k:p.slice(0,i+1).join("/")})});
+      n.f.push([nm,f]);
+    });
+    (function draw(n,depth){
+      Object.keys(n.d).sort((x,y)=>x.localeCompare(y)).forEach(k=>{
+        const c=n.d[k],isOpen=!!q||openMap[c.k]===true;
+        const kids=files.filter(f=>f.path.indexOf(c.k+"/")===0);
+        const r=document.createElement("div");r.className="it dir";r.style.paddingLeft=(12+depth*16)+"px";
+        const cb=document.createElement("input");cb.type="checkbox";cb.checked=kids.every(f=>f.on);
+        cb.onchange=()=>{kids.forEach(f=>f.on=cb.checked);list($("q").value)};
+        const b=document.createElement("button");b.textContent=(isOpen?"\u25BC ":"\u25B6 ")+k;b.title=c.k;
+        b.onclick=()=>{openMap[c.k]=!isOpen;list($("q").value)};
+        r.append(cb,b);box.appendChild(r);
+        if(isOpen)draw(c,depth+1);
+      });
+      n.f.sort((x,y)=>x[0].localeCompare(y[0])).forEach(e=>{
+        const f=e[1];
+        const r=document.createElement("div");r.className="it"+(f===cur?" cur":"");r.style.paddingLeft=(12+depth*16)+"px";
+        const cb=document.createElement("input");cb.type="checkbox";cb.checked=f.on;cb.onchange=()=>{f.on=cb.checked;list($("q").value)};
+        const b=document.createElement("button");b.textContent=e[0];b.title=f.path;
+        b.onclick=()=>{cur=f;show();list($("q").value)};
+        r.append(cb,b);box.appendChild(r);
+      });
+    })(root,0);
+    cnt();
+  }
+  function cnt(){const n=files.filter(f=>f.on);$("cnt").textContent=n.length+" of "+files.length+" selected, about "+Math.ceil(n.reduce((a,f)=>a+f.text.length,0)/4).toLocaleString()+" tokens"}
+  function show(){$("fn").textContent=cur?cur.path:"Pick a file";$("code").textContent=cur?cur.text:""}
+  function ai(all){
+    const use=files.filter(f=>all||f.on);
+    return "PROJECT: "+title+"\nFILES:\n"+use.map(f=>"- "+f.path).join("\n")+"\n\n"+use.map(f=>"=== FILE: "+f.path+" ===\n"+f.text).join("\n\n")+"\n";
+  }
+  function flash(b,t){const o=b.textContent;b.textContent=t;setTimeout(()=>b.textContent=o,1200)}
+  function copy(txt,b){
+    (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>flash(b,"Copied"),()=>{
+      const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);a.select();
+      try{document.execCommand("copy");flash(b,"Copied")}catch(e){flash(b,"Copy failed")}a.remove()});
+  }
+  $("t").textContent=title;
+  $("q").oninput=e=>list(e.target.value);
+  $("cf").onclick=e=>cur&&copy(cur.text,e.target);
+  $("cs").onclick=e=>copy(ai(false),e.target);
+  $("dl").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([ai(true)],{type:"text/plain"}));a.download=title+".txt";a.click()};
+  cur=files[0]||null;if(cur){const p=cur.path.split("/");p.pop();p.forEach((x,i)=>openMap[p.slice(0,i+1).join("/")]=true)}list();show();
+}
+
+function esc(t){return t.replace(/<\/script/gi,"<\\/script")}
+function safe(t){return t.replace(/--/g,"- -").replace(/</g,"(")}
+
+function build(name,use){
+  const total=use.reduce((a,f)=>a+f.tokens,0);
+  const css="*{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}:root{--bg:#eef1f4;--p:#fbfcfd;--ink:#1d2630;--mute:#6b7885;--line:#d8dee4;--acc:#1f6f8b}@media(prefers-color-scheme:dark){:root{--bg:#14181d;--p:#1b2127;--ink:#e4e9ee;--mute:#8d9aa7;--line:#2c353e;--acc:#5cb8d6}}"+
+   "#app{display:grid;grid-template-columns:290px 1fr;height:100vh}@media(max-width:700px){#app{grid-template-columns:1fr;grid-template-rows:40vh 1fr}}"+
+   "aside{border-right:1px solid var(--line);background:var(--p);display:flex;flex-direction:column;min-height:0}aside header{padding:12px;border-bottom:1px solid var(--line)}"+
+   "h1{font-size:16px;margin:0 0 8px}input[type=search]{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink)}"+
+   "#tree{overflow:auto;flex:1;padding:6px 0}.dir{padding:6px 12px 2px;color:var(--mute);font:12px ui-monospace,Menlo,monospace}.it{display:flex;align-items:center;gap:6px;padding:1px 12px}.it.cur{background:var(--bg)}.it.dir button{font-weight:600}"+
+   ".it button{all:unset;cursor:pointer;flex:1;padding:3px 0;font:13px ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"+
+   "#cnt{padding:8px 12px;border-top:1px solid var(--line);color:var(--mute);font-size:12px}"+
+   "section{display:flex;flex-direction:column;min-height:0}.bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}#fn{flex:1;font:13px ui-monospace,Menlo,monospace;min-width:120px}"+
+   ".bar button{font:inherit;cursor:pointer;padding:6px 11px;border-radius:7px;border:1px solid var(--line);background:var(--p);color:var(--ink)}.bar button.p{background:var(--acc);color:var(--bg);border-color:var(--acc)}"+
+   "pre{margin:0;padding:14px;overflow:auto;flex:1;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;white-space:pre;tab-size:2}";
+  const idx=use.map(f=>" "+safe(f.path)+" ("+f.tokens+" tok)").join("\n");
+  let h="<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>"+safe(name)+"</title></head><body>\n"+
+   "<!--\nBUNDLE PAD PROJECT: "+safe(name)+"\nFiles: "+use.length+" | Approx tokens: "+total+"\nFOR AI: every project file is stored below as a raw <script type=\"text/plain\" data-path=\"PATH\"> block, in the order listed here. Read the blocks, not the viewer code at the bottom. The only escape used is that the closing script tag inside a file appears as <\\/script.\nINDEX:\n"+idx+"\n-->\n";
+  use.forEach(f=>{h+="<script type=\"text/plain\" data-path=\""+f.path.replace(/&/g,"&amp;").replace(/\"/g,"&quot;")+"\">"+esc(f.text)+"</scr"+"ipt>\n"});
+  h+="<div id=\"app\"><aside><header><h1 id=\"t\"></h1><input type=\"search\" id=\"q\" placeholder=\"Search names and contents\" aria-label=\"Search\"></header><div id=\"tree\"></div><div id=\"cnt\"></div></aside>"+
+   "<section><div class=\"bar\"><span id=\"fn\"></span><button id=\"cf\">Copy file</button><button id=\"cs\" class=\"p\">Copy selected for AI</button><button id=\"dl\">Download .txt</button></div><pre id=\"code\"></pre></section></div>\n"+
+   "<style>"+css+"</style>\n<script>("+viewer.toString()+")()</scr"+"ipt>\n</body></html>";
+  return h;
+}
+
+function pick(){
+  const name=($("name").value.trim()||"bundle").replace(/[^\w.\- ]+/g,"_");
+  return {name,use:files.filter(f=>f.on)};
+}
+function download(name,html){
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"text/html"}));a.download=name+".html";document.body.appendChild(a);a.click();a.remove();
+}
+
+/* ---------- library (IndexedDB) ---------- */
+function db(){return new Promise((res,rej)=>{const r=indexedDB.open("bundlepad",1);r.onupgradeneeded=()=>r.result.createObjectStore("b",{keyPath:"id",autoIncrement:true});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function dbDo(mode,fn){const d=await db();return new Promise((res,rej)=>{const t=d.transaction("b",mode),s=t.objectStore("b"),q=fn(s);t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)})}
+async function renderLib(){
+  const box=$("lib");
+  try{
+    const all=await dbDo("readonly",s=>s.getAll());
+    if(!all||!all.length){box.innerHTML="<p class=\"empty\">Nothing saved yet. Bundles you save stay in this browser.</p>";return}
+    box.textContent="";
+    all.reverse().forEach(b=>{
+      const r=document.createElement("div");r.className="lib";
+      const i=document.createElement("div");i.innerHTML="<b></b><small></small>";
+      i.firstChild.textContent=b.name;i.lastChild.textContent=b.count+" files, about "+fmt(b.tokens)+" tokens, saved "+new Date(b.date).toLocaleDateString();
+      const d=document.createElement("button");d.textContent="Download";d.onclick=()=>download(b.name,b.html);
+      const x=document.createElement("button");x.textContent="Delete";x.onclick=async()=>{await dbDo("readwrite",s=>s.delete(b.id));renderLib()};
+      r.append(i,d,x);box.appendChild(r);
+    });
+  }catch(e){box.innerHTML="<p class=\"empty\">The library is not available in this browser. Use Download bundle instead.</p>"}
+}
+
+/* ---------- events ---------- */
+$("bFolder").onclick=()=>$("inFolder").click();
+$("bFiles").onclick=()=>$("inFiles").click();
+$("inFolder").onchange=e=>{addFiles([...e.target.files]);e.target.value=""};
+$("inFiles").onchange=e=>{addFiles([...e.target.files]);e.target.value=""};
+$("bClear").onclick=()=>{files=[];$("name").value="";render()};
+$("bAll").onclick=()=>{const any=files.some(f=>f.on);files.forEach(f=>{if(!f.why)f.on=!any});render()};
+$("bGen").onclick=()=>{const p=pick();download(p.name,build(p.name,p.use))};
+$("bSave").onclick=async()=>{
+  const p=pick();
+  try{
+    await dbDo("readwrite",s=>s.add({name:p.name,html:build(p.name,p.use),count:p.use.length,tokens:p.use.reduce((a,f)=>a+f.tokens,0),date:Date.now()}));
+    $("msg").textContent="Saved to your library.";renderLib();
+  }catch(e){$("msg").textContent="Could not save here. Use Download bundle instead."}
+};
+
+/* drag and drop, including whole folders */
+const drop=$("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("on")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("on")}));
+function walk(entry,out){
+  return new Promise(res=>{
+    if(entry.isFile)entry.file(f=>{f._path=entry.fullPath.slice(1);out.push(f);res()},()=>res());
+    else{
+      const rd=entry.createReader(),all=[];
+      (function more(){rd.readEntries(async es=>{
+        if(!es.length){await Promise.all(all.map(x=>walk(x,out)));res()}
+        else{all.push(...es);more()}
+      },()=>res())})();
+    }
+  });
+}
+drop.addEventListener("drop",async e=>{
+  const items=[...(e.dataTransfer.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+  if(items.length){const out=[];await Promise.all(items.map(i=>walk(i,out)));addFiles(out)}
+  else addFiles([...e.dataTransfer.files]);
+});
+
+renderLib();
+})();
+</script>
+</body>
+</html>
